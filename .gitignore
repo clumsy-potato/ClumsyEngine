@@ -1,0 +1,9 @@
+#venv
+venv/
+
+#games
+texture/
+gamelogic/
+
+#cache
+__pycache__/
