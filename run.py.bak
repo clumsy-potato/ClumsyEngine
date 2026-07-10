@@ -1,0 +1,330 @@
+import pygame
+import random
+import copy
+import sys
+
+if hasattr(pygame, "IS_CE"):
+    print("Yay")
+else:
+    print("Install CE instead bro")
+    exit()
+
+pygame.init()
+screen = pygame.display.set_mode((800, 600))
+WIDTH, HEIGHT = 800, 600
+clock = pygame.time.Clock()
+pygame.display.set_caption("ClumsyTest")
+RUNNING=True
+bgcolor=(0,0,0)
+camera = [0,0,1] #x y zoom
+
+def newrect(x, y, sizex, sizey):
+    sx = -int(sizex/2)
+    sy = -int(sizey/2)
+    return pygame.Rect(x+sx, y+sy, sizex, sizey)
+def zoomit(rectz, zoom=camera[2]):
+    if isinstance(rectz, pygame.Rect):
+        return (rectz.x*zoom, rectz.y*zoom, rectz.width*zoom, rectz.height*zoom)
+    return (rectz[0]*zoom, rectz[1]*zoom, rectz[2]*zoom, rectz[3]*zoom)
+def moveit(rectz, mx=camera[0], my=camera[1]):
+    if isinstance(rectz, pygame.Rect):
+        return (rectz.x+mx, rectz.y+my, rectz.width, rectz.height)
+    return (rectz[0]+mx, rectz[1]+my, rectz[2], rectz[3])
+def backtrc(ome, dx, dy, cols): #제미나이야 backtrc 만들어줘
+    if abs(dx) < 0.4 and abs(dy) < 0.4: #너무느리면안움직임
+        return ome.x, ome.y, False, False
+        
+    temp = ome.copy() 
+    blx, bly = False, False
+    collideCalc = max(1, int(max(abs(dx), abs(dy)) / 3) + 1) 
+    stepdx, stepdy = dx/collideCalc, dy/collideCalc
+    
+    if abs(dx) < 0.01: stepdx = 0
+    if abs(dy) < 0.01: stepdy = 0
+    
+    for _ in range(collideCalc):
+        
+        if not blx and abs(stepdx) > 0.005:
+            test = temp.copy()
+            test.x += stepdx
+
+            hit_indices = test.collidelistall(cols)
+            if hit_indices:
+                hit_cols = [cols[i] for i in hit_indices]
+                
+                if stepdx > 0:
+                    temp.right = min(c.left for c in hit_cols) 
+                elif stepdx < 0:
+                    temp.left = max(c.right for c in hit_cols) 
+                blx = True
+            else:
+                temp.x += stepdx
+                
+        if not bly and abs(stepdy) > 0.005:
+            test = temp.copy()
+            test.y += stepdy
+            hit_indices = test.collidelistall(cols)
+            if hit_indices:
+                hit_cols = [cols[i] for i in hit_indices]
+                
+                if stepdy > 0:
+                    temp.bottom = min(c.top for c in hit_cols) 
+                elif stepdy < 0:
+                    temp.top = max(c.bottom for c in hit_cols) 
+                bly = True
+            else:
+                temp.y += stepdy
+
+    return temp.x, temp.y, blx, bly
+
+class objectMan: #레이어가 됨
+    class box:
+        def nextrect(self):
+             return self.myrect.move(self.dx, self.dy)
+        def __init__(self, x, y, sizex, sizey, dx=0, dy=0, hasPhysic=False, hasCollision=True, hasPhysicpp=False):
+            self.myrect = newrect(x,y,sizex,sizey)
+            self.dx, self.dy = dx, dy
+            self.size = [sizex, sizey]
+            self.hboxdesign = "RECT"
+            self.designhelp = (255,255,255)
+            self.hasPhysic = hasPhysic
+            self.hasCollision = hasCollision
+            self.hasPhysicpp = hasPhysicpp
+            if hasPhysicpp:
+                self.endx = 0
+                self.endy = 0
+        def draw(self):
+            if self.hboxdesign == "RECT":
+                pygame.draw.rect(screen, self.designhelp, moveit(zoomit(self.myrect),mx=-camera[0]+WIDTH//2, my=-camera[1]+HEIGHT//2), 0)
+            elif self.hboxdesign == "CIRCLE":
+                pygame.draw.circle(screen, self.designhelp, zoomit(self.myrect.x+int(self.myrect.width/2)-camera[0]+WIDTH//2, self.myrect.y+int(self.myrect.height/2)-camera[1]+HEIGHT//2), int(self.myrect.width/2))
+        def IcolU_upd(self, objlist):
+            boxlist = [obj.myrect for obj in objlist if obj.hasCollision and obj != self]
+            nextr = self.nextrect()
+            unionrect = nextr.union(self.myrect)
+            yo = unionrect.collidelistall(boxlist)
+            if yo ==[]:
+                self.myrect.x += self.dx
+                self.myrect.y += self.dy
+            else:
+                #for col in yo:
+                self.myrect.x, self.myrect.y, self.dx, self.dy = backtrc(self.myrect, self.dx, self.dy, [boxlist[col] for col in yo])
+
+    def __init__(self):
+        self.objects={} #objectID, object
+        self.slowdamage = 0.9
+    def physic(self, objlist=None):
+        for obj in objlist:
+            if obj.hasPhysic:
+                obj.IcolU_upd(list(objlist))
+                obj.dx *= self.slowdamage
+                obj.dy *= self.slowdamage
+                if obj.dx < 0.1 and obj.dx > -0.1:
+                    obj.dx = 0
+                if obj.dy < 0.1 and obj.dy > -0.1:
+                    obj.dy = 0
+    def morephysic(self, objlist=None):
+        for obj in objlist:
+            if obj.hasPhysic and obj.hasPhysicpp: # 러프, 나중에 더.
+                obj.dx /= self.slowdamage
+                obj.dy /= self.slowdamage
+                obj.dx = obj.dx+(obj.endx-obj.myrect.x)*0.1
+                obj.dy = obj.dy+(obj.endy-obj.myrect.y)*0.1
+    def next(self):
+        self.physic(self.objects.values())
+        #for obj in self.objects.values():
+        #    obj.physic()
+    def render(self):
+        for box in self.objects.values():
+            box.draw()
+
+class effectMan:
+    def __init__(self):
+        self.effects = [] #effectID, effect
+        self.layer = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    @staticmethod
+    def rectpoly(x, y, size, rot):
+        _rect = [pygame.Vector2(-size/2, -size/2), pygame.Vector2(size/2, -size/2), pygame.Vector2(size/2, size/2), pygame.Vector2(-size/2, size/2)]
+        return [c.rotate(rot)+pygame.Vector2(x, y) for c in _rect]
+    class effect:
+        def __init__(self, x, y, size, color, duration=60, startspread=0, rotation=0, form=[0,0,-0.1,0]):
+            self.x = x+random.uniform(-startspread, startspread)
+            self.y = y+random.uniform(-startspread, startspread)
+            self.color = color
+            self.duration = duration
+            self.rotation=rotation
+            self.size = size
+            self.form = form
+            self.startduration = duration
+            self.alpha = 255
+        def render(self, layer):
+            pygame.draw.polygon(layer, (*self.color, self.alpha), effectMan.rectpoly(self.x, self.y, self.size, self.rotation))
+        def update(self):
+            self.rotation += self.form[3]
+            self.x += self.form[0]
+            self.y += self.form[1]
+            self.size += self.form[2]
+            self.alpha = int(255*(self.duration/self.startduration))
+            self.duration -= 1
+    def new(self, amount, x, y, size, color, duration, startspread, rotation, form=[0,0,-0.1,0]):
+        for _ in range(amount):
+            self.effects.append(effectMan.effect(x, y, size, color, duration, startspread, rotation, form))
+    def update(self):
+        self.layer.fill((0,0,0,0))
+        self.effects = [e for e in self.effects if e.duration > 0]
+        
+        for effect in self.effects:
+            effect.update()
+            effect.render(self.layer)
+
+class keypool:
+    def __init__(self):
+        self.keystate = {}
+        self.keybind = {}
+    def getkey_upd(self, eventl):
+        prsd = pygame.key.get_pressed()
+        for i in range(len(prsd)):
+            self.keystate[i] = prsd[i]
+            self.keystate["inst_"+str(i)] = None
+            for event in eventl:
+                if event.type == pygame.KEYDOWN:
+                    self.keystate["inst_"+str(event.key)] = True
+                if event.type == pygame.KEYUP:
+                    self.keystate["inst_"+str(event.key)] = False
+                if event.type == pygame.QUIT:
+                    global RUNNING
+                    RUNNING = False
+    def keybind_upd(self):
+        for nm in self.keybind:
+            if nm in self.keystate.keys():
+                self.keybind[nm] = [self.keystate[nm], self.keystate.get("inst_"+str(nm))]
+
+class externalThings:
+    def __init__(self):
+        pass
+
+    def swiggcam(self, x, y, swr):
+        camera[0] += (x-camera[0])*swr
+        camera[1] += (y-camera[1])*swr
+    def swizzlecam(self, x, y, xp, yp, swr):
+        camera[0] = x+(xp-x)*swr
+        camera[1] = y+(yp-y)*swr
+    def getmousexy(self):
+        mouse = pygame.mouse.get_pos()
+        return (mouse[0]+camera[0]-WIDTH//2, mouse[1]+camera[1]-HEIGHT//2)
+    def getmouse(self):
+        return pygame.mouse.get_pos()
+    def gametoscreen(self, x, y):
+        return [x-camera[0]+WIDTH//2, y-camera[1]+HEIGHT//2]
+
+# DEBUG
+#maplayers = []
+#effectz = effectMan()
+#keypoolz = keypool()
+#maplayers.append(objectMan())
+#maplayers[0].objects[0] = objectMan.box(0,50,50, hasPhysic=True)
+#maplayers[0].objects[0].dx = 10
+#maplayers[0].objects[0].dy = 10
+#maplayers[0].objects[0].designhelp = (255,0,0)
+# 이스터 에그 : 만약 이걸 읽는다면, 축하! 이스터에그를 찾았다! 좋은 하루 :)
+#maplayers[0].objects[1] = objectMan.box(0,100,50, hasCollision=True)
+#keypoolz.keybind[pygame.K_SPACE] = False
+
+class engine:
+    def engine_startupdate(self):
+        events = pygame.event.get()
+        keypoolz.getkey_upd(events)
+        keypoolz.keybind_upd()
+    def engine_physicupdate(self):
+        # update
+        for layer in globals()['maplayers']: #globals로 해. 난 몰라
+            layer.next()
+
+    # DEBUG
+    #if keypoolz.keybind[pygame.K_SPACE][0]:
+    #    maplayers[0].objects[0].dx += 3
+    #    maplayers[0].objects[0].dy += 3
+    #    mousepos = getmousexy()
+    #    #swiggcam(mousepos[0], mousepos[1], 0.05)
+    #    swizzlecam(0, 0, mousepos[0], mousepos[1], 0.1)
+    #    effectz.new(5, mousepos[0]+WIDTH//2, mousepos[1]+HEIGHT//2, 5, (255,255,255), 30, 20, 0, [random.randint(-10, 10), random.randint(-10, 10),-0.1,10])
+    # it fuckin works great hell yeah
+
+    def engine_drawupdate(self):
+        # drawing
+        screen.fill(bgcolor)
+        for layer in globals()['maplayers']: #아냐 globals로 해 그냥 건들지말고
+            layer.render()
+        globals()['effectz'].update(); screen.blit(globals()['effectz'].layer, (0, 0)) #아냐 아냐 난 몰라 그냥 냅둬 좀
+        pygame.display.flip()
+    def engine_endupate(self):
+        clock.tick(60)
+
+candlelist = {}
+class candleMan:
+    def __init__(self):
+        self.redoit = False
+    def newcandle(self, name):
+        candlelist[name] = True
+    def rmcandle(self, name):
+        if name in candlelist:
+            del candlelist[name]
+    def togglecandle(self, name):
+        if name in candlelist:
+            candlelist[name] = not candlelist[name]
+        else:
+            candlelist[name] = True
+    def redo(self):
+        self.redoit = True
+
+# load game
+cman = candleMan()
+enginez = engine()
+keypoolz = keypool()
+effectmanz = effectMan()
+objectmanz = objectMan()
+externalz = externalThings()
+import importlib
+spec = importlib.util.spec_from_file_location("owo", "game.py")
+game = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(game)
+count = game.SPINCOUNT
+
+class bun: #bun 짬때리기
+    #대파 양파 다진마늘 생강 계피 산초가루 깻잎 쑥갓 전복 새우 건새우 다시마 감초 쑥 등등 128개의 재료를 넣어주고,
+    def __init__(self):
+        self.shares = {}
+    def getengine(self):
+        return globals()['enginez']
+    def change_value(self, name, val):
+        globals()[name] = val
+        return val
+    def get_value(self, name):
+        return globals().get(name)
+    # 여기서 끝이 아니다. 사장님이 직접 만든 특제 비밀(?) 양념으로 무 다시마 표고버섯 통마늘 선지 월계수잎 팔각을 찜솥에 찐 다음 절구에 쥰내 비벼가지고 한데 넣어 푹 고아주면
+    def Cengine(self, name):
+        return globals()["enginez"].__getattribute__(name)()
+    def Ckeypool(self, name, *args):
+        return globals()["keypoolz"].__getattribute__(name)(*args)
+    def CeffectMan(self, name, *args):
+        return globals()["effectmanz"].__getattribute__(name)(*args)
+    def CobjectMan(self, name, *args):
+        return globals()["objectmanz"].__getattribute__(name)(*args)
+    def CexternalThings(self, name, *args):
+        return globals()["externalz"].__getattribute__(name)(*args)
+
+# mainloop
+while RUNNING:
+    for counting in range(count):
+        getattr(game, "exelayer"+str(counting))(bun) #함수명 개짜침
+    #DoNotMakeMoreThan3LayersPleaseOrElseIWillCry(True) #becauseItMayGotTooMuchSlow
+    isitend = False #도구 사용 피해를 피해자에게 전가하는 행위는 법률적, 윤리적으로 매우 부당한 상황으로, 주로 가해자가 자신의 책임을 회피하고 피해자를 탓하는(Victim Blaming) 전형적인 형태입니다. 이러한 상황은 범죄, 계약, 직장 등 다양한 분야에서 발생할 수 있습니다.
+    while not isitend: #사례로는 보이스피싱, 메신저 피싱 등이 있습니다.
+        isitend = True
+        for candle in list(candlelist.keys()):
+            if candlelist[candle]:
+                getattr(game, candle)(bun)
+            if cman.redoit:
+                cman.redoit = False
+                isitend = False
+                break
