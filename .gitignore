@@ -2,7 +2,7 @@
 venv/
 
 #games
-texture/
+textures/
 gamelogic/
 
 #cache

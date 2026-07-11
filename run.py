@@ -38,7 +38,7 @@ screen = pygame.display.set_mode((800, 600))
 WIDTH, HEIGHT = 800, 600
 TEXTURE_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'textures') # 텍스쳐 위치
 FONT_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'Galmuri9.ttf')
-GAME_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'gamelogic-test')
+GAME_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'gamelogic')
 clock = pygame.time.Clock()
 pygame.display.set_caption("ClumsyTest")
 RUNNING=True
@@ -124,35 +124,36 @@ def backtrc(ome, dx, dy, cols): #제미나이가 쥰내 멋지게 만들어준 �
     return round(px), round(py), dx, dy, blocked_faces
 
 class uiMan:
-    fonts = {} # fontsize, font
+    _boldf = pygame.Font(FONT_PATH, 500)
+    _boldf.set_bold(True)
+    fonts = [pygame.Font(FONT_PATH, 500), _boldf]
     class box:
         def renderfont(self, x, y, text, color, size, transp, isbold):
-            if size not in uiMan.fonts.keys():
-                _boldf = pygame.Font(FONT_PATH, size)
-                _boldf.set_bold(True)
-                uiMan.fonts[size] = [pygame.Font(FONT_PATH, size), _boldf]
-            font = uiMan.fonts[size][int(isbold)]
+            font = uiMan.fonts[int(isbold)]
             font = font.render(text, False, color)
             font.set_alpha(transp)
-            screen.blit(font, (x,y))
-        def __init__(self, x, y, design="text", designhelp={"text":'This is test text!', "size":30, "transp":255, "color":(128,128,128), "isbold":False}, curframe=0):
+            screen.blit(pygame.transform.scale_by(font,size*0.002), (x,y))
+        def __init__(self, x, y, design="text", designhelp={"text":'This is test text!', "size":30, "transp":255, "color":(128,128,128), "isbold":False}, curframe=0, size=1):
             self.x = x
             self.y = y
             self.design = design
             self.designhelp = designhelp
             self.curframe = curframe
+            self.size = size
         def draw(self):
             if self.design == "text":
                 self.renderfont(self.x, self.y, self.designhelp['text'], self.designhelp['color'], self.designhelp['size'], self.designhelp['transp'], self.designhelp['isbold'])
             elif self.design == "texture":
                 frames = textures[self.designhelp['texture_name']]
-                screen.blit(frames[self.curframe % len(frames)], (self.x, self.y))
+                screen.blit(pygame.transform.scale_by(frames[self.curframe % len(frames)], self.size), (self.x, self.y))
     def nextdraw(self):
         for a in self.objects.values():
             a.draw()
         pass # 나중에
-    def is_hover(self):
-        a
+    def is_hover(self, name):
+        obj = self.objects[name]
+        texturesz = textures[obj.designhelp['texture_name']][obj.curframe].get_size()
+        return pygame.Rect(obj.x, obj.y, texturesz[0]*obj.size, texturesz[1]*obj.size).collidepoint(pygame.mouse.get_pos())
     def __init__(self):
         self.objects =  {} # objectname, object
 
@@ -187,7 +188,8 @@ class objectMan: #레이어가 됨
                 pygame.draw.rect(screen, self.designhelp, whatishoulddo, 0)
             elif self.hboxdesign == 'texture':
                 texture = textures[self.designhelp["texture_name"]]
-                screen.blit(texture[self.cur_frame%len(texture)], whatishoulddo)
+                texture = pygame.transform.scale(texture[self.cur_frame%len(texture)], self.size)
+                screen.blit(texture, whatishoulddo)
         def IcolU_upd(self, objlist): # 제미나이가 쥰내 뭐시기
             self.blocked_faces = {"top": False, "bottom": False, "left": False, "right": False}
             boxlist = [obj.myrect for obj in objlist if obj.hasCollision and obj != self]
@@ -245,7 +247,9 @@ class objectMan: #레이어가 됨
     def render(self):
         for box in self.objects.values():
             box.draw()
-
+    def is_hover(self, name):
+        obj = self.objects[name]
+        return obj.myrect.collidepoint(pygame.mouse.get_pos())
 class effectMan:
     def __init__(self):
         self.effects = [] #effectID, effect
