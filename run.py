@@ -295,7 +295,7 @@ class keypool:
         self.keystate = {}
         self.keybind_cfg = {}
         self.keybind_stat = {}
-        self.mousestate = {"x":0, "y":0, "left": False, "right":False, "left_inst":False, "right_inst":False}
+        self.mousestate = {"x":0, "y":0, "left": False, "right":False, "left_inst":False, "right_inst":False, "INSTHELP":[False,False]}
     def getkey_upd(self, eventl):
         prsd = pygame.key.get_pressed()
         for i in range(len(prsd)):
@@ -309,13 +309,11 @@ class keypool:
                 if event.type == pygame.QUIT:
                     global RUNNING
                     RUNNING = False
-                self.mousestate["left"], _ ,self.mousestate["right"]=pygame.mouse.get_pressed()
-                self.mousestate["left_inst"]=False
-                self.mousestate["right_inst"]=False
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    self.mousestate["left_inst"]=event.button==1
-                    self.mousestate["right_inst"]=event.button==3
-                self.mousestate["x"], self.mousestate["y"] = pygame.mouse.get_pos()
+        self.mousestate["left"], _ ,self.mousestate["right"]=pygame.mouse.get_pressed()
+        self.mousestate["left_inst"]=self.mousestate["left"] and not self.mousestate["INSTHELP"][0]
+        self.mousestate["right_inst"]=self.mousestate["right"] and not self.mousestate["INSTHELP"][1]
+        self.mousestate["x"], self.mousestate["y"] = pygame.mouse.get_pos()
+        self.mousestate["INSTHELP"] = [self.mousestate["left"], self.mousestate["right"]]
     def keybind_upd(self):
         for nm, keycode in self.keybind_cfg.items():
             continuous = self.keystate.get(keycode, False)
@@ -356,8 +354,8 @@ class externalThings:
 class engine:
     def engine_startupdate(self):
         events = pygame.event.get()
-        keypoolz.getkey_upd(events)
         keypoolz.keybind_upd()
+        keypoolz.getkey_upd(events)
     def engine_physicupdate(self):
         # update
         for layer in globals()['maplayers']: #globals로 해. 난 몰라
@@ -404,6 +402,8 @@ class candleMan:
             candlelist[name] = True
     def runonce(self, name):
         getattr(games[name], 'do')(bun)
+    def rmall(self):
+        candlelist.clear()
 
 # load game
 cman = candleMan()
@@ -446,9 +446,11 @@ bun = bunz()
 # mainloop
 while RUNNING:
     for candle in list(candlelist.keys()):
-        if candlelist[candle]:
+        status = candlelist.get(candle, False)
+        if status:
+            is_init = (status == 2)
             getattr(games[candle], 'do')(bun)
-            if candlelist[candle] == 2:
+            if is_init and candle in candlelist:
                 cman.rmcandle(candle)
     if RUNNING and candlelist == {}:
         print("잘못된 무한 반복에 의한 종료. 버그면 체크,", candlelist, "잘못된 무한 반복에 의한 종료!")
