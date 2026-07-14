@@ -171,6 +171,7 @@ class objectMan: #레이어가 됨
             self.designhelp = designhelp
             self.cur_frame = 0
             self.flipx = False
+            self.flipy = False
             self.hasPhysic = hasPhysic
             self.hasFrict = hasFrict
             self.frictInY = False
@@ -185,10 +186,11 @@ class objectMan: #레이어가 됨
         def draw(self):
             whatishoulddo = moveit(zoomit(self.myrect),mx=-camera[0]+WIDTH//2, my=-camera[1]+HEIGHT//2)
             if self.hboxdesign == 'notexture':
-                pygame.draw.rect(screen, self.designhelp, whatishoulddo, 0)
+                pygame.draw.rect(screen, self.designhelp["color"], whatishoulddo, 0)
             elif self.hboxdesign == 'texture':
                 texture = textures[self.designhelp["texture_name"]]
                 texture = pygame.transform.scale(texture[self.cur_frame%len(texture)], self.size)
+                texture = pygame.transform.flip(texture, self.flipx, self.flipy)
                 screen.blit(texture, whatishoulddo)
         def IcolU_upd(self, objlist): # 제미나이가 쥰내 뭐시기
             self.blocked_faces = {"top": False, "bottom": False, "left": False, "right": False}
@@ -358,8 +360,9 @@ class engine:
         keypoolz.getkey_upd(events)
     def engine_physicupdate(self):
         # update
-        for layer in globals()['maplayers']: #globals로 해. 난 몰라
-            layer.next()
+        #for layer in globals()['maplayers']: #globals로 해. 난 몰라
+        #    layer.next()
+        objectmanz.next() #이게맞다
 
     # DEBUG
     #if keypoolz.keybind[pygame.K_SPACE][0]:
