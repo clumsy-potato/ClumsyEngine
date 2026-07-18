@@ -4,6 +4,7 @@ venv/
 #games
 textures/
 gamelogic/
+nodummy/
 
 #cache
 __pycache__/

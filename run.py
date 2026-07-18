@@ -68,60 +68,63 @@ def moveit(rectz, mx=camera[0], my=camera[1]):
     if isinstance(rectz, pygame.Rect):
         return (rectz.x+mx, rectz.y+my, rectz.width, rectz.height)
     return (rectz[0]+mx, rectz[1]+my, rectz[2], rectz[3])
-def backtrc(ome, dx, dy, cols): #제미나이가 쥰내 멋지게 만들어준 충돌 코드
+def backtrc(ome, dx, dy, cols): #챗지피티가 쥰내 멋있게 만들어준 코드
     if abs(dx) < 0.01:
         dx = 0.0
     if abs(dy) < 0.01:
         dy = 0.0
 
-    blocked_faces = {"top": False, "bottom": False, "left": False, "right": False}
-
     if not cols:
-        return round(ome.x), round(ome.y), dx, dy, blocked_faces
+        return round(ome.x), round(ome.y), dx, dy
 
-    px, py = float(ome.x), float(ome.y)
-    w, h = int(ome.width), int(ome.height)
+    px = float(ome.x)
+    py = float(ome.y)
+    w = ome.width
+    h = ome.height
 
     steps = max(1, int(max(abs(dx), abs(dy)) / 5) + 1)
     step_dx = dx / steps
     step_dy = dy / steps
 
     for _ in range(steps):
+
+        # X축 이동
         if step_dx != 0.0:
             px += step_dx
+
             test_rect = pygame.Rect(round(px), round(py), w, h)
-            hit_indices = test_rect.collidelistall(cols)
-            if hit_indices:
-                hit_cols = [cols[i] for i in hit_indices]
+            hit = test_rect.collidelistall(cols)
+
+            if hit:
+                hit_cols = [cols[i] for i in hit]
 
                 if step_dx > 0:
-                    px = float(min(c.left for c in hit_cols) - w)
-                    blocked_faces["right"] = True
+                    px = min(c.left for c in hit_cols) - w
                 else:
-                    px = float(max(c.right for c in hit_cols))
-                    blocked_faces["left"] = True
+                    px = max(c.right for c in hit_cols)
 
                 dx = 0.0
                 step_dx = 0.0
 
+        # Y축 이동
         if step_dy != 0.0:
             py += step_dy
+
             test_rect = pygame.Rect(round(px), round(py), w, h)
-            hit_indices = test_rect.collidelistall(cols)
-            if hit_indices:
-                hit_cols = [cols[i] for i in hit_indices]
+            hit = test_rect.collidelistall(cols)
+
+            if hit:
+                hit_cols = [cols[i] for i in hit]
 
                 if step_dy > 0:
-                    py = float(min(c.top for c in hit_cols) - h)
-                    blocked_faces["bottom"] = True
+                    py = min(c.top for c in hit_cols) - h
                 else:
-                    py = float(max(c.bottom for c in hit_cols))
-                    blocked_faces["top"] = True
+                    py = max(c.bottom for c in hit_cols)
 
                 dy = 0.0
                 step_dy = 0.0
 
-    return round(px), round(py), dx, dy, blocked_faces
+    return round(px), round(py), dx, dy
 
 class uiMan:
     _boldf = pygame.Font(FONT_PATH, 500)
@@ -144,8 +147,11 @@ class uiMan:
             if self.design == "text":
                 self.renderfont(self.x, self.y, self.designhelp['text'], self.designhelp['color'], self.designhelp['size'], self.designhelp['transp'], self.designhelp['isbold'])
             elif self.design == "texture":
-                frames = textures[self.designhelp['texture_name']]
-                screen.blit(pygame.transform.scale_by(frames[self.curframe % len(frames)], self.size), (self.x, self.y))
+                frame = textures[self.designhelp['texture_name']]
+                frame = frame[self.curframe % len(frame)]
+                frame = pygame.transform.scale_by(frame, self.size)
+                frame.set_alpha(self.designhelp.get('transp', 255))
+                screen.blit(frame, (self.x, self.y))
     def nextdraw(self):
         for a in self.objects.values():
             a.draw()
@@ -169,7 +175,7 @@ class objectMan: #레이어가 됨
             self.size = [sizex, sizey]
             self.hboxdesign = hboxdesign
             self.designhelp = designhelp
-            self.cur_frame = 0
+            self.curframe = 0
             self.flipx = False
             self.flipy = False
             self.hasPhysic = hasPhysic
@@ -189,39 +195,75 @@ class objectMan: #레이어가 됨
                 pygame.draw.rect(screen, self.designhelp["color"], whatishoulddo, 0)
             elif self.hboxdesign == 'texture':
                 texture = textures[self.designhelp["texture_name"]]
-                texture = pygame.transform.scale(texture[self.cur_frame%len(texture)], self.size)
+                texture = pygame.transform.scale(texture[self.curframe%len(texture)], self.size)
                 texture = pygame.transform.flip(texture, self.flipx, self.flipy)
                 screen.blit(texture, whatishoulddo)
-        def IcolU_upd(self, objlist): # 제미나이가 쥰내 뭐시기
-            self.blocked_faces = {"top": False, "bottom": False, "left": False, "right": False}
+        def update_blocked_faces(self, boxlist): #챗지피티가 쥰내 멋있게 뭐시기
+            self.blocked_faces = {
+                "top": False,
+                "bottom": False,
+                "left": False,
+                "right": False
+            }
+            r = self.myrect
+            for c in boxlist:
+                if r.move(0, 1).colliderect(c):
+                    self.blocked_faces["bottom"] = True
+                if r.move(0, -1).colliderect(c):
+                    self.blocked_faces["top"] = True
+                if r.move(-1, 0).colliderect(c):
+                    self.blocked_faces["left"] = True
+                if r.move(1, 0).colliderect(c):
+                    self.blocked_faces["right"] = True
+
+        def IcolU_upd(self, objlist):
             boxlist = [obj.myrect for obj in objlist if obj.hasCollision and obj != self]
+
             if not hasattr(self, 'px'):
                 self.px = float(self.myrect.x)
                 self.py = float(self.myrect.y)
-            elif self.myrect.x != round(self.px) or self.myrect.y != round(self.py):
-                self.px = float(self.myrect.x)
-                self.py = float(self.myrect.y)
+
+            self.myrect.x = round(self.px)
+            self.myrect.y = round(self.py)
+
             nextr = self.nextrect()
             yo = nextr.collidelistall(boxlist)
+
             if yo == []:
                 self.px += self.dx
                 self.py += self.dy
-                self.myrect.x = round(self.px)
-                self.myrect.y = round(self.py)
             else:
-                temp_rect = pygame.Rect(round(self.px), round(self.py), self.myrect.width, self.myrect.height)
-                new_x, new_y, self.dx, self.dy, self.blocked_faces = backtrc(temp_rect, self.dx, self.dy, [boxlist[col] for col in yo])
-                self.px = float(new_x)
-                self.py = float(new_y)
-                self.myrect.x = new_x
-                self.myrect.y = new_y
+                temp_rect = pygame.Rect(
+                    round(self.px),
+                    round(self.py),
+                    self.myrect.width,
+                    self.myrect.height
+                )
+
+                self.px, self.py, self.dx, self.dy = backtrc(
+                    temp_rect,
+                    self.dx,
+                    self.dy,
+                    [boxlist[col] for col in yo]
+                )
+
+            # 위치 확정
+            self.myrect.x = round(self.px)
+            self.myrect.y = round(self.py)
+
+            # ★ 여기 추가
+            self.update_blocked_faces(boxlist)
+
             if self.hasFrict:
                 if self.blocked_faces['top'] or self.blocked_faces['bottom']:
                     self.dx /= self.slipper
-                else: self.dx /= self.airslipper
-                if self.blocked_faces['left'] or self.blocked_faces['right'] and self.frictInY:
+                else:
+                    self.dx /= self.airslipper
+
+                if (self.blocked_faces['left'] or self.blocked_faces['right']) and self.frictInY:
                     self.dy /= self.slipper
-                else: self.dy /= self.airslipper
+                else:
+                    self.dy /= self.airslipper
         def getxy(self):
             return (self.myrect.x, self.myrect.y)
 
@@ -235,6 +277,9 @@ class objectMan: #레이어가 됨
                     obj.dx = 0
                 if obj.dy < 0.1 and obj.dy > -0.1:
                     obj.dy = 0
+            else: # 멍청이
+                obj.myrect.x = round(obj.px)
+                obj.myrect.y = round(obj.py)
     def morephysic(self, objlist=None):
         for obj in objlist:
             if obj.hasPhysic and obj.hasPhysicpp: # 러프, 나중에 더.
@@ -291,7 +336,6 @@ class effectMan:
             effect.update()
             effect.render(self.layer)
 
-
 class keypool:
     def __init__(self):
         self.keystate = {}
@@ -332,11 +376,12 @@ class externalThings:
     def swizzlecam(self, x, y, xp, yp, swr):
         camera[0] = x+(xp-x)*swr
         camera[1] = y+(yp-y)*swr
-    def getmousexy(self):
+    def getmousexy(self): #이미 쓰이니까 빼기 x
         mouse = pygame.mouse.get_pos()
         return (mouse[0]+camera[0]-WIDTH//2, mouse[1]+camera[1]-HEIGHT//2)
     def getmouse(self):
-        return pygame.mouse.get_pos()
+        mouse = pygame.mouse.get_pos()
+        return (mouse[0], mouse[1])
     def gametoscreen(self, x, y):
         return [x-camera[0]+WIDTH//2, y-camera[1]+HEIGHT//2]
 
@@ -380,8 +425,8 @@ class engine:
         #for layer in globals()['maplayers']: #아냐 globals로 해 그냥 건들지말고
         #    layer.render()
         objectmanz.render()
-        globals()['effectz'].update(); screen.blit(globals()['effectz'].layer, (0, 0)) #아냐 아냐 난 몰라 그냥 냅둬 좀
         globals()['uiz'].nextdraw()
+        globals()['effectz'].update(); screen.blit(globals()['effectz'].layer, (0, 0)) #아냐 아냐 난 몰라 그냥 냅둬 좀
         pygame.display.flip()
     def engine_endupdate(self):
         clock.tick(60)
@@ -436,10 +481,10 @@ class bunz: #bun 짬때리기
         return val
     def get_value(self, name):
         return globals().get(name)
-    def stateset(self, name, value):
+    def stateset(self, name, value): #쓰이니까 냅두기
         self.states[name] = value
         return value
-    def stateget(self, name):
+    def stateget(self, name): #얘도
         return self.states[name]
     def rethinksay(self, text): #혹시 모르니까
         print(text)
