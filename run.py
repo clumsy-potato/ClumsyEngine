@@ -3,6 +3,7 @@ import random
 import copy
 import sys
 import os
+import math
 from PIL import Image
 
 def anim_to_surface_list(path): #챗지피티 ㄳ
@@ -131,11 +132,11 @@ class uiMan:
     _boldf.set_bold(True)
     fonts = [pygame.Font(FONT_PATH, 500), _boldf]
     class box:
-        def renderfont(self, x, y, text, color, size, transp, isbold):
-            font = uiMan.fonts[int(isbold)]
-            font = font.render(text, False, color)
-            font.set_alpha(transp)
-            screen.blit(pygame.transform.scale_by(font,size*0.002), (x,y))
+        #def renderfont(self, x, y, text, color, size, transp, isbold):
+        #    font = uiMan.fonts[int(isbold)]
+        #    font = font.render(text, False, color)
+        #    font.set_alpha(transp)
+        #    screen.blit(pygame.transform.scale_by(font,size*0.002), (x,y))
         def __init__(self, x, y, design="text", designhelp={"text":'This is test text!', "size":30, "transp":255, "color":(128,128,128), "isbold":False}, curframe=0, size=1):
             self.x = x
             self.y = y
@@ -143,6 +144,22 @@ class uiMan:
             self.designhelp = designhelp
             self.curframe = curframe
             self.size = size
+            self.last_cache_key = None
+            self.cached_text_surf = None
+        def renderfont(self, x, y, text, color, size, transp, isbold): #제미나이 ㄳ
+            current_key = (text, color, size, transp, isbold)
+
+            if self.last_cache_key != current_key:
+                self.last_cache_key = current_key
+
+                font = uiMan.fonts[int(isbold)]
+                font_surf = font.render(text, False, color)
+                font_surf.set_alpha(transp)
+                self.cached_text_surf = pygame.transform.scale_by(font_surf, size * 0.002)
+
+            # 그리기
+            if self.cached_text_surf:
+                screen.blit(self.cached_text_surf, (x, y))
         def draw(self):
             if self.design == "text":
                 self.renderfont(self.x, self.y, self.designhelp['text'], self.designhelp['color'], self.designhelp['size'], self.designhelp['transp'], self.designhelp['isbold'])
@@ -158,6 +175,11 @@ class uiMan:
         pass # 나중에
     def is_hover(self, name):
         obj = self.objects[name]
+        if obj.design == "text":
+            if obj.cached_text_surf:
+                text_rect = obj.cached_text_surf.get_rect(topleft=(obj.x, obj.y))
+                return text_rect.collidepoint(pygame.mouse.get_pos())
+            return False
         texturesz = textures[obj.designhelp['texture_name']][obj.curframe].get_size()
         return pygame.Rect(obj.x, obj.y, texturesz[0]*obj.size, texturesz[1]*obj.size).collidepoint(pygame.mouse.get_pos())
     def __init__(self):
@@ -166,7 +188,26 @@ class uiMan:
 class objectMan: #레이어가 됨
     class box:
         def nextrect(self):
-             return pygame.Rect(round(self.px + self.dx), round(self.py + self.dy), self.myrect.width, self.myrect.height)
+            return pygame.Rect(round(self.px + self.dx), round(self.py + self.dy), self.myrect.width, self.myrect.height)
+        def renderfont(self, x, y, text, color, size, transp, isbold):
+            # 💡 [최적화] 글자 내용이 바뀔 때만 딱 한 번 uiMan 폰트를 가져와 연산합니다.
+            if self.last_text != text:
+                self.last_text = text
+                # 말씀하신 대로 uiMan의 폰트셋을 빌려 씁니다.
+                font = uiMan.fonts[int(isbold)]
+                font_surf = font.render(text, False, color)
+                font_surf.set_alpha(transp)
+                # 500pt짜리 거대 이미지를 미리 원하는 크기로 줄여서 저장해둡니다.
+                self.cached_text_surf = pygame.transform.scale_by(font_surf, size * 0.002)
+
+            # 매 프레임은 이미 만들어진 이미지를 화면에 띄우기만 하므로 렉이 전혀 없습니다.
+            if self.cached_text_surf:
+                screen.blit(self.cached_text_surf, (x, y))
+        #def renderfont(self, x, y, text, color, size, transp, isbold): #재탕하기
+        #    font = uiMan.fonts[int(isbold)]
+        #    font = font.render(text, False, color)
+        #    font.set_alpha(transp)
+        #    screen.blit(pygame.transform.scale_by(font,size*0.002), (x,y))
         def __init__(self, x, y, sizex, sizey, dx=0, dy=0, hasPhysic=False, hasCollision=True, hasPhysicpp=False, hasFrict=False, hboxdesign="notexture", designhelp={"color":(255,255,255)}):
             self.myrect = newrect(x,y,sizex,sizey)
             self.dx, self.dy = dx, dy
@@ -175,6 +216,8 @@ class objectMan: #레이어가 됨
             self.size = [sizex, sizey]
             self.hboxdesign = hboxdesign
             self.designhelp = designhelp
+            self.last_text = None
+            self.textsurf_cache = None
             self.curframe = 0
             self.flipx = False
             self.flipy = False
@@ -198,6 +241,15 @@ class objectMan: #레이어가 됨
                 texture = pygame.transform.scale(texture[self.curframe%len(texture)], self.size)
                 texture = pygame.transform.flip(texture, self.flipx, self.flipy)
                 screen.blit(texture, whatishoulddo)
+            elif self.hboxdesign == 'text': #최적화 좋아하는 제미나이
+                self.renderfont(
+                    whatishoulddo[0], whatishoulddo[1],
+                    self.designhelp['text'],
+                    self.designhelp['color'],
+                    self.designhelp['size'],
+                    self.designhelp['transp'],
+                    self.designhelp['isbold']
+                )
         def update_blocked_faces(self, boxlist): #챗지피티가 쥰내 멋있게 뭐시기
             self.blocked_faces = {
                 "top": False,
@@ -384,6 +436,17 @@ class externalThings:
         return (mouse[0], mouse[1])
     def gametoscreen(self, x, y):
         return [x-camera[0]+WIDTH//2, y-camera[1]+HEIGHT//2]
+    def screentogame(self,x,y):
+        return [x-WIDTH//2+camera[0],y-HEIGHT//2+camera[1]]
+    def pythagoras(self, x1, y1, x2, y2, power): #제미나이 ㄳ
+        full_dx = x2 - x1
+        full_dy = y2 - y1
+        distance = math.sqrt(full_dx**2 + full_dy**2)
+        if distance == 0:
+            return 0, 0
+        dx = (full_dx / distance) * power
+        dy = (full_dy / distance) * power
+        return dx, dy
 
 # DEBUG
 #maplayers = []
